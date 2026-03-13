@@ -4,6 +4,8 @@
 const express = require('express');
 const router = express.Router();
 const usuariosRoutes = require('./usuarios');
+const { checkSupabaseConnection } = require('../services/supabaseHealthService');
+const { getSupabaseConfigStatus } = require('../config/supabaseClient');
 
 // Health check
 router.get('/health', (req, res) => {
@@ -15,6 +17,34 @@ router.get('/health', (req, res) => {
   });
 });
 
+// Health check de Supabase (sin exponer secretos)
+router.get('/health/supabase', async (req, res, next) => {
+  try {
+    const config = getSupabaseConfigStatus();
+
+    if (!config.urlConfigured || !config.serviceRoleConfigured) {
+      return res.status(503).json({
+        success: false,
+        status: 'Supabase no configurado',
+        config,
+        timestamp: new Date().toISOString(),
+      });
+    }
+
+    const connection = await checkSupabaseConnection();
+
+    res.json({
+      success: true,
+      status: 'Supabase activo',
+      config,
+      connection,
+      timestamp: new Date().toISOString(),
+    });
+  } catch (error) {
+    next(error);
+  }
+});
+
 // Info del servidor
 router.get('/', (req, res) => {
   res.json({
@@ -23,6 +53,7 @@ router.get('/', (req, res) => {
     description: 'Backend para sistema de gestión de préstamos',
     endpoints: {
       health: '/api/health',
+      supabaseHealth: '/api/health/supabase',
       usuarios: '/api/usuarios',
       prestamos: '/api/prestamos',
       inventario: '/api/inventario'
