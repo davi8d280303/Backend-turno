@@ -1,17 +1,54 @@
 const crypto = require('crypto');
 const AppError = require('../utils/AppError');
 
+let bcrypt = null;
+try {
+  // Dependencia opcional: si no está disponible, se usa fallback con scrypt.
+  // eslint-disable-next-line global-require
+  bcrypt = require('bcrypt');
+} catch {
+  bcrypt = null;
+}
+
 const ACCESS_TOKEN_SECRET = process.env.ACCESS_TOKEN_SECRET || 'dev_access_secret_change_me';
 const REFRESH_TOKEN_SECRET = process.env.REFRESH_TOKEN_SECRET || 'dev_refresh_secret_change_me';
 const ACCESS_TOKEN_EXPIRES_IN = Number(process.env.ACCESS_TOKEN_EXPIRES_IN || 900); // 15 minutos
 const REFRESH_TOKEN_EXPIRES_IN = Number(process.env.REFRESH_TOKEN_EXPIRES_IN || 604800); // 7 días
+const PASSWORD_HASH_ROUNDS = Number(process.env.PASSWORD_HASH_ROUNDS || 10);
+
+const hashPassword = (plainPassword) => {
+  if (bcrypt) {
+    return bcrypt.hashSync(plainPassword, PASSWORD_HASH_ROUNDS);
+  }
+
+  const salt = crypto.randomBytes(16).toString('hex');
+  const hash = crypto.scryptSync(plainPassword, salt, 64).toString('hex');
+  return `scrypt$${salt}$${hash}`;
+};
+
+const verifyPassword = (plainPassword, storedHash) => {
+  if (storedHash?.startsWith('scrypt$')) {
+    const [, salt, hash] = storedHash.split('$');
+    if (!salt || !hash) {
+      return false;
+    }
+    const computedHash = crypto.scryptSync(plainPassword, salt, 64).toString('hex');
+    return crypto.timingSafeEqual(Buffer.from(hash, 'hex'), Buffer.from(computedHash, 'hex'));
+  }
+
+  if (!bcrypt) {
+    return false;
+  }
+
+  return bcrypt.compareSync(plainPassword, storedHash);
+};
 
 const users = [
   {
     id: 1,
     username: 'admin',
     email: 'admin@turno.local',
-    password: 'admin123',
+    password_hash: hashPassword('admin123'),
     role: 'admin',
     area_id: 'sistemas',
     nombre: 'Administrador'
@@ -20,7 +57,7 @@ const users = [
     id: 2,
     username: 'operador',
     email: 'operador@turno.local',
-    password: 'operador123',
+    password_hash: hashPassword('operador123'),
     role: 'operador',
     area_id: 'biblioteca',
     nombre: 'Operador Biblioteca'
@@ -28,6 +65,11 @@ const users = [
 ];
 
 const refreshTokenStore = new Map();
+
+const hashRefreshToken = (refreshToken) => crypto
+  .createHash('sha256')
+  .update(refreshToken)
+  .digest('hex');
 
 const toBase64Url = (input) => Buffer.from(input)
   .toString('base64')
@@ -127,6 +169,7 @@ const generateTokenPair = (user) => {
 
   refreshTokenStore.set(tokenId, {
     user_id: user.id,
+    refresh_token_hash: hashRefreshToken(refreshToken),
     expires_at: Date.now() + REFRESH_TOKEN_EXPIRES_IN * 1000
   });
 
@@ -149,7 +192,7 @@ const sanitizeUser = (user) => ({
 });
 
 const findUserByCredentials = (email, password) => users.find(
-  (user) => user.email === email && user.password === password
+  (user) => user.email === email && verifyPassword(password, user.password_hash)
 );
 
 const findUserById = (id) => users.find((user) => user.id === id);
@@ -229,7 +272,14 @@ const rotateRefreshToken = (refreshToken) => {
   }
 
   const storedToken = refreshTokenStore.get(decoded.token_id);
-  if (!storedToken || storedToken.user_id !== decoded.user_id || storedToken.expires_at < Date.now()) {
+  const refreshTokenHash = hashRefreshToken(refreshToken);
+
+  if (
+    !storedToken
+    || storedToken.user_id !== decoded.user_id
+    || storedToken.expires_at < Date.now()
+    || storedToken.refresh_token_hash !== refreshTokenHash
+  ) {
     throw new AppError('Refresh token revocado o expirado', {
       statusCode: 401,
       code: 'REVOKED_REFRESH_TOKEN'
@@ -297,7 +347,10 @@ const logout = (refreshToken) => {
   try {
     const decoded = verifyToken(refreshToken, REFRESH_TOKEN_SECRET);
     if (decoded?.token_id) {
-      refreshTokenStore.delete(decoded.token_id);
+      const storedToken = refreshTokenStore.get(decoded.token_id);
+      if (storedToken && storedToken.refresh_token_hash === hashRefreshToken(refreshToken)) {
+        refreshTokenStore.delete(decoded.token_id);
+      }
     }
   } catch {
     // Logout idempotente: ignorar refresh token inválido
