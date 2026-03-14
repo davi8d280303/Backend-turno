@@ -5,6 +5,7 @@ const express = require('express');
 const router = express.Router();
 const usuariosRoutes = require('./usuarios');
 const authRoutes = require('./auth');
+const areasRoutes = require('./areas');
 const { checkSupabaseConnection } = require('../services/supabaseHealthService');
 const { getSupabaseConfigStatus } = require('../config/supabaseClient');
 
@@ -66,5 +67,6 @@ router.get('/', (req, res) => {
 // Rutas principales
 router.use('/usuarios', usuariosRoutes);
 router.use('/auth', authRoutes);
+router.use('/areas', areasRoutes);
 
 module.exports = router;

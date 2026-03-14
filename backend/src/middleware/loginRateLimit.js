@@ -1,9 +1,9 @@
 const AppError = require('../utils/AppError');
 
-const windowMs = Number(process.env.AUTH_LOGIN_RATE_LIMIT_WINDOW_MS || 15 * 60 * 1000);
-const maxAttempts = Number(process.env.AUTH_LOGIN_RATE_LIMIT_MAX_ATTEMPTS || 5);
-
 const attemptsByIp = new Map();
+
+const getWindowMs = () => Number(process.env.AUTH_LOGIN_RATE_LIMIT_WINDOW_MS || 15 * 60 * 1000);
+const getMaxAttempts = () => Number(process.env.AUTH_LOGIN_RATE_LIMIT_MAX_ATTEMPTS || 5);
 
 const clearExpiredEntry = (ip, entry, now) => {
   if (entry.resetAt <= now) {
@@ -16,6 +16,8 @@ const clearExpiredEntry = (ip, entry, now) => {
 const loginRateLimit = (req, res, next) => {
   const ip = req.ip || req.headers['x-forwarded-for'] || 'unknown';
   const now = Date.now();
+  const windowMs = getWindowMs();
+  const maxAttempts = getMaxAttempts();
 
   const currentEntry = attemptsByIp.get(ip);
   if (currentEntry && clearExpiredEntry(ip, currentEntry, now)) {
