@@ -88,8 +88,15 @@ LOGIN_RATE_LIMIT_MAX=8
 
 1. Crear proyecto en Supabase.
 2. Ejecutar `backend/supabase/schema.sql` en SQL Editor.
-3. Cargar usuarios iniciales con `password_hash` generado en formato `scrypt$...`.
-4. Probar conexión: `GET /api/health/supabase`.
+3. Generar hashes de contraseña en formato `scrypt$...`:
+
+```bash
+npm run hash:password -- "TuPassword123!"
+```
+
+4. Editar `backend/supabase/seed.sql` reemplazando `REPLACE_WITH_SCRYPT_HASH_*`.
+5. Ejecutar `backend/supabase/seed.sql` en SQL Editor.
+6. Probar conexión: `GET /api/health/supabase`.
 
 ## ✅ Checks
 
