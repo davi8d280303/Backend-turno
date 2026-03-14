@@ -1,5 +1,6 @@
 const crypto = require('crypto');
 const AppError = require('../utils/AppError');
+const authUsersFixture = require('../fixtures/authUsers');
 
 let bcrypt = null;
 try {
@@ -43,26 +44,15 @@ const verifyPassword = (plainPassword, storedHash) => {
   return bcrypt.compareSync(plainPassword, storedHash);
 };
 
-const users = [
-  {
-    id: 1,
-    username: 'admin',
-    email: 'admin@turno.local',
-    password_hash: hashPassword('admin123'),
-    role: 'admin',
-    area_id: 'sistemas',
-    nombre: 'Administrador'
-  },
-  {
-    id: 2,
-    username: 'operador',
-    email: 'operador@turno.local',
-    password_hash: hashPassword('operador123'),
-    role: 'operador',
-    area_id: 'biblioteca',
-    nombre: 'Operador Biblioteca'
-  }
-];
+const users = authUsersFixture.map((user) => ({
+  id: user.id,
+  username: user.username,
+  email: user.email,
+  password_hash: hashPassword(user.plain_password),
+  role: user.role,
+  area_id: user.area_id,
+  nombre: user.nombre
+}));
 
 const refreshTokenStore = new Map();
 

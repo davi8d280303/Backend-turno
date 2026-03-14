@@ -30,21 +30,31 @@ app.use(notFoundHandler);
 // Manejador de errores (debe ser último)
 app.use(errorHandler);
 
-// Iniciar servidor con manejo de errores de bind (p. ej. EADDRINUSE)
-const server = app.listen(PORT, () => {
-  console.log(`\n🚀 Servidor corriendo en puerto ${PORT}`);
-  console.log(`📍 http://localhost:${PORT}/api`);
-  console.log(`🔄 Health check: http://localhost:${PORT}/api/health\n`);
-});
+const startServer = (port = PORT) => {
+  const server = app.listen(port, () => {
+    console.log(`\n🚀 Servidor corriendo en puerto ${port}`);
+    console.log(`📍 http://localhost:${port}/api`);
+    console.log(`🔄 Health check: http://localhost:${port}/api/health\n`);
+  });
 
-server.on('error', (err) => {
-  if (err && err.code === 'EADDRINUSE') {
-    console.error(`\n⛔ Error: puerto ${PORT} ya está en uso. Mata el proceso que lo utiliza o cambia la variable PORT.`);
-    console.error('Sugerencias: `netstat -ano | findstr :5000` -> `taskkill /PID <pid> /F` o `npx kill-port 5000`.');
+  server.on('error', (err) => {
+    if (err && err.code === 'EADDRINUSE') {
+      console.error(`\n⛔ Error: puerto ${port} ya está en uso. Mata el proceso que lo utiliza o cambia la variable PORT.`);
+      console.error('Sugerencias: `netstat -ano | findstr :5000` -> `taskkill /PID <pid> /F` o `npx kill-port 5000`.');
+      process.exit(1);
+    }
+    console.error(err);
     process.exit(1);
-  }
-  console.error(err);
-  process.exit(1);
-});
+  });
 
-module.exports = app;
+  return server;
+};
+
+if (require.main === module) {
+  startServer();
+}
+
+module.exports = {
+  app,
+  startServer
+};

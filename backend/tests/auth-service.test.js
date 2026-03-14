@@ -4,10 +4,10 @@ const assert = require('node:assert/strict');
 const authService = require('../src/services/authService');
 
 test('login retorna tokens y payload esperado en access token', () => {
-  const login = authService.login({ email: 'admin@turno.local', password: 'admin123' });
+  const login = authService.login({ email: 'admin.sistemas@turno.local', password: 'admin123' });
 
-  assert.equal(login.user.username, 'admin');
-  assert.equal(login.user.email, 'admin@turno.local');
+  assert.equal(login.user.username, 'admin_sistemas');
+  assert.equal(login.user.email, 'admin.sistemas@turno.local');
   assert.ok(login.access_token);
   assert.ok(login.refresh_token);
 
