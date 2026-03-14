@@ -1,4 +1,5 @@
 const crypto = require('crypto');
+const AppError = require('../utils/AppError');
 
 const ACCESS_TOKEN_SECRET = process.env.ACCESS_TOKEN_SECRET || 'dev_access_secret_change_me';
 const REFRESH_TOKEN_SECRET = process.env.REFRESH_TOKEN_SECRET || 'dev_refresh_secret_change_me';
@@ -9,6 +10,7 @@ const users = [
   {
     id: 1,
     username: 'admin',
+    email: 'admin@turno.local',
     password: 'admin123',
     role: 'admin',
     area_id: 'sistemas',
@@ -17,6 +19,7 @@ const users = [
   {
     id: 2,
     username: 'operador',
+    email: 'operador@turno.local',
     password: 'operador123',
     role: 'operador',
     area_id: 'biblioteca',
@@ -139,29 +142,59 @@ const generateTokenPair = (user) => {
 const sanitizeUser = (user) => ({
   id: user.id,
   username: user.username,
+  email: user.email,
   role: user.role,
   area_id: user.area_id,
   nombre: user.nombre
 });
 
-const findUserByCredentials = (username, password) => users.find(
-  (user) => user.username === username && user.password === password
+const findUserByCredentials = (email, password) => users.find(
+  (user) => user.email === email && user.password === password
 );
 
 const findUserById = (id) => users.find((user) => user.id === id);
 
-const login = ({ username, password }) => {
-  if (!username || !password) {
-    const error = new Error('Usuario y contraseña son obligatorios');
-    error.status = 400;
-    throw error;
+const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+
+const buildMissingFieldsErrors = ({ email, password }) => {
+  const fields = {};
+
+  if (!email) {
+    fields.email = 'El email es obligatorio';
+  } else if (!EMAIL_REGEX.test(String(email))) {
+    fields.email = 'El email no es válido';
   }
 
-  const user = findUserByCredentials(username, password);
+  if (!password) {
+    fields.password = 'La contraseña es obligatoria';
+  }
+
+  return fields;
+};
+
+const login = ({ email, password }) => {
+  const fields = buildMissingFieldsErrors({ email, password });
+
+  if (Object.keys(fields).length > 0) {
+    throw new AppError('Revisa los campos marcados', {
+      statusCode: 400,
+      code: 'VALIDATION_ERROR',
+      fields
+    });
+  }
+
+  const normalizedEmail = String(email).toLowerCase();
+  const user = findUserByCredentials(normalizedEmail, password);
+
   if (!user) {
-    const error = new Error('Credenciales inválidas');
-    error.status = 401;
-    throw error;
+    throw new AppError('Credenciales inválidas', {
+      statusCode: 401,
+      code: 'INVALID_CREDENTIALS',
+      fields: {
+        email: 'Email o contraseña incorrectos',
+        password: 'Email o contraseña incorrectos'
+      }
+    });
   }
 
   return {
@@ -172,38 +205,43 @@ const login = ({ username, password }) => {
 
 const rotateRefreshToken = (refreshToken) => {
   if (!refreshToken) {
-    const error = new Error('Refresh token requerido');
-    error.status = 400;
-    throw error;
+    throw new AppError('Refresh token requerido', {
+      statusCode: 400,
+      code: 'REFRESH_TOKEN_REQUIRED'
+    });
   }
 
   let decoded;
   try {
     decoded = verifyToken(refreshToken, REFRESH_TOKEN_SECRET);
   } catch {
-    const error = new Error('Refresh token inválido o expirado');
-    error.status = 401;
-    throw error;
+    throw new AppError('Refresh token inválido o expirado', {
+      statusCode: 401,
+      code: 'INVALID_REFRESH_TOKEN'
+    });
   }
 
   if (decoded.type !== 'refresh' || !decoded.token_id) {
-    const error = new Error('Refresh token inválido');
-    error.status = 401;
-    throw error;
+    throw new AppError('Refresh token inválido', {
+      statusCode: 401,
+      code: 'INVALID_REFRESH_TOKEN'
+    });
   }
 
   const storedToken = refreshTokenStore.get(decoded.token_id);
   if (!storedToken || storedToken.user_id !== decoded.user_id || storedToken.expires_at < Date.now()) {
-    const error = new Error('Refresh token revocado o expirado');
-    error.status = 401;
-    throw error;
+    throw new AppError('Refresh token revocado o expirado', {
+      statusCode: 401,
+      code: 'REVOKED_REFRESH_TOKEN'
+    });
   }
 
   const user = findUserById(decoded.user_id);
   if (!user) {
-    const error = new Error('Usuario no encontrado');
-    error.status = 404;
-    throw error;
+    throw new AppError('Usuario no encontrado', {
+      statusCode: 404,
+      code: 'USER_NOT_FOUND'
+    });
   }
 
   refreshTokenStore.delete(decoded.token_id);
@@ -216,25 +254,28 @@ const rotateRefreshToken = (refreshToken) => {
 
 const getUserFromAccessToken = (accessToken) => {
   if (!accessToken) {
-    const error = new Error('Access token requerido');
-    error.status = 401;
-    throw error;
+    throw new AppError('Access token requerido', {
+      statusCode: 401,
+      code: 'ACCESS_TOKEN_REQUIRED'
+    });
   }
 
   let decoded;
   try {
     decoded = verifyToken(accessToken, ACCESS_TOKEN_SECRET);
   } catch {
-    const error = new Error('Access token inválido o expirado');
-    error.status = 401;
-    throw error;
+    throw new AppError('Access token inválido o expirado', {
+      statusCode: 401,
+      code: 'INVALID_ACCESS_TOKEN'
+    });
   }
 
   const user = findUserById(decoded.user_id);
   if (!user) {
-    const error = new Error('Usuario no encontrado');
-    error.status = 404;
-    throw error;
+    throw new AppError('Usuario no encontrado', {
+      statusCode: 404,
+      code: 'USER_NOT_FOUND'
+    });
   }
 
   return {
