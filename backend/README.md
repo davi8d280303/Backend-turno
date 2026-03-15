@@ -104,3 +104,16 @@ npm run hash:password -- "TuPassword123!"
 npm test
 npm run check
 ```
+
+## 🧪 Smoke test del flujo auth (paso siguiente)
+
+Con backend levantado y usuarios seed cargados:
+
+```bash
+npm run smoke:auth -- "superadmin@demo.com" "TuPassword123!"
+```
+
+Esto valida de punta a punta:
+1. `POST /api/auth/login`
+2. `GET /api/auth/me`
+3. `POST /api/auth/refresh`
