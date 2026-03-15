@@ -72,7 +72,8 @@ async function login({ email, password }) {
     });
   }
 
-  const user = await findUserByEmail(email);
+  const normalizedEmail = String(email).trim().toLowerCase();
+  const user = await findUserByEmail(normalizedEmail);
   if (!user || !user.is_active || !verifyPassword(password, user.password_hash)) {
     throw new AppError('Credenciales inválidas.', {
       statusCode: 401,

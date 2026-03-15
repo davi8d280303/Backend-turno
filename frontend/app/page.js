@@ -3,7 +3,7 @@
 import { useRouter } from 'next/navigation';
 import { useEffect, useRef, useState } from 'react';
 import Link from 'next/link';
-import { loginUsuario } from '@/lib/api';
+import { clearSession, loginUsuario, saveSession } from '@/lib/api';
 import Loader from '@/app/components/Loader';
 
 export default function LoginPage() {
@@ -13,60 +13,52 @@ export default function LoginPage() {
   const [error, setError] = useState(null);
   const [formData, setFormData] = useState({ email: '', password: '' });
 
-  // Foco automático al cargar
   useEffect(() => {
+    clearSession();
+
     if (emailRef.current) {
       emailRef.current.focus();
     }
   }, []);
 
-  // Manejar cambios en el formulario
   const handleChange = (e) => {
     const { name, value } = e.target;
     setFormData((prev) => ({
       ...prev,
       [name]: value,
     }));
-    setError(null); // Limpiar error al escribir
+    setError(null);
   };
 
-  // Manejar envío del formulario con asincronía
   async function handleSubmit(e) {
     e.preventDefault();
     setIsLoading(true);
     setError(null);
 
     try {
-      // Validar campos
       if (!formData.email || !formData.password) {
         throw new Error('Por favor completa todos los campos');
       }
 
-      // Validar email
       const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
       if (!emailRegex.test(formData.email)) {
         throw new Error('Email inválido');
       }
 
-      // Consumir API de login (comentado si el backend no lo implementó aún)
-      // const result = await loginUsuario(formData.email, formData.password);
-      // if (!result.success) {
-      //   throw new Error(result.error || 'Error al iniciar sesión');
-      // }
+      const result = await loginUsuario(formData.email, formData.password);
+      if (!result.success || !result.accessToken || !result.refreshToken) {
+        throw new Error(result.error || 'Error al iniciar sesión');
+      }
 
-      // Simular pausa (comentar en producción)
-      await new Promise((resolve) => setTimeout(resolve, 800));
-
-      // Usar credenciales de demo o guardar token
-      localStorage.setItem(
-        'usuario',
-        JSON.stringify({
-          email: formData.email,
+      saveSession({
+        accessToken: result.accessToken,
+        refreshToken: result.refreshToken,
+        user: {
+          ...(result.data || {}),
           loginTime: new Date().toISOString(),
-        })
-      );
+        },
+      });
 
-      // Redirigir al panel
       router.push('/panel');
     } catch (err) {
       console.error('Error en login:', err);
@@ -78,20 +70,14 @@ export default function LoginPage() {
 
   return (
     <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-gray-50 to-gray-100">
-      {/* Loader fullscreen */}
       {isLoading && <Loader isVisible fullscreen message="Iniciando sesión..." />}
 
       <div className="w-full max-w-lg bg-white rounded-2xl shadow-xl p-10 border border-gray-200">
         <div className="text-center mb-8">
-          <h1 className="text-3xl font-bold text-gray-800 mb-2">
-            ¡Bienvenido de nuevo!
-          </h1>
-          <p className="text-gray-600 text-lg">
-            Ingresa tus credenciales para continuar
-          </p>
+          <h1 className="text-3xl font-bold text-gray-800 mb-2">¡Bienvenido de nuevo!</h1>
+          <p className="text-gray-600 text-lg">Ingresa tus credenciales para continuar</p>
         </div>
 
-        {/* Mostrar error si existe */}
         {error && (
           <div
             className="mb-6 p-4 bg-red-50 border border-red-200 rounded-xl text-red-700 text-sm"

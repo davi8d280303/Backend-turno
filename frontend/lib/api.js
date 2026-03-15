@@ -4,7 +4,12 @@
  */
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5000/api';
-const API_TIMEOUT = parseInt(process.env.NEXT_PUBLIC_API_TIMEOUT || '30000');
+const API_TIMEOUT = parseInt(process.env.NEXT_PUBLIC_API_TIMEOUT || '30000', 10);
+const AUTH_BASE = `${API_URL}/auth`;
+
+const ACCESS_TOKEN_KEY = 'accessToken';
+const REFRESH_TOKEN_KEY = 'refreshToken';
+const USER_SESSION_KEY = 'usuario';
 
 /**
  * Clase personalizada para errores de API
@@ -37,7 +42,6 @@ async function fetchWithTimeout(url, options = {}) {
 
     clearTimeout(timeoutId);
 
-    // Parsear respuesta
     const data = await response.json().catch(() => null);
 
     if (!response.ok) {
@@ -64,12 +68,74 @@ async function fetchWithTimeout(url, options = {}) {
   }
 }
 
+export function saveSession({ accessToken, refreshToken, user }) {
+  if (typeof window === 'undefined') return;
+
+  if (accessToken) {
+    localStorage.setItem(ACCESS_TOKEN_KEY, accessToken);
+  }
+
+  if (refreshToken) {
+    localStorage.setItem(REFRESH_TOKEN_KEY, refreshToken);
+  }
+
+  if (user) {
+    localStorage.setItem(USER_SESSION_KEY, JSON.stringify(user));
+  }
+}
+
+export function clearSession() {
+  if (typeof window === 'undefined') return;
+
+  localStorage.removeItem(ACCESS_TOKEN_KEY);
+  localStorage.removeItem(REFRESH_TOKEN_KEY);
+  localStorage.removeItem(USER_SESSION_KEY);
+}
+
+/**
+ * POST - Iniciar sesión
+ */
+export async function loginUsuario(email, password) {
+  try {
+    if (!email || !password) {
+      throw new APIError('Email y contraseña requeridos', 400);
+    }
+
+    const data = await fetchWithTimeout(`${AUTH_BASE}/login`, {
+      method: 'POST',
+      body: JSON.stringify({ email, password }),
+    });
+
+    const session = data?.data || {};
+
+    return {
+      success: true,
+      data: session.user || null,
+      accessToken: session.accessToken || null,
+      refreshToken: session.refreshToken || null,
+      error: null,
+    };
+  } catch (error) {
+    console.error('Error en loginUsuario:', error);
+    return {
+      success: false,
+      data: null,
+      accessToken: null,
+      refreshToken: null,
+      error: error.message || 'Error al iniciar sesión',
+    };
+  }
+}
+
 /**
  * GET - Obtener todos los usuarios
  */
-export async function getUsuarios() {
+export async function getUsuarios(accessToken) {
   try {
-    const data = await fetchWithTimeout(`${API_URL}/usuarios`);
+    const data = await fetchWithTimeout(`${API_URL}/usuarios`, {
+      headers: accessToken ? { Authorization: `Bearer ${accessToken}` } : {},
+    });
+
     return {
       success: true,
       data: data?.data || [],
@@ -90,13 +156,16 @@ export async function getUsuarios() {
 /**
  * GET - Obtener usuario por ID
  */
-export async function getUsuarioById(id) {
+export async function getUsuarioById(id, accessToken) {
   try {
     if (!id) {
       throw new APIError('ID de usuario requerido', 400);
     }
 
-    const data = await fetchWithTimeout(`${API_URL}/usuarios/${id}`);
+    const data = await fetchWithTimeout(`${API_URL}/usuarios/${id}`, {
+      headers: accessToken ? { Authorization: `Bearer ${accessToken}` } : {},
+    });
+
     return {
       success: true,
       data: data?.data || null,
@@ -112,40 +181,6 @@ export async function getUsuarioById(id) {
   }
 }
 
-/**
- * POST - Crear un nuevo usuario (login/registro)
- */
-export async function loginUsuario(email, password) {
-  try {
-    if (!email || !password) {
-      throw new APIError('Email y contraseña requeridos', 400);
-    }
-
-    const data = await fetchWithTimeout(`${API_URL}/usuarios/login`, {
-      method: 'POST',
-      body: JSON.stringify({ email, password }),
-    });
-
-    return {
-      success: true,
-      data: data?.data || null,
-      token: data?.token || null,
-      error: null,
-    };
-  } catch (error) {
-    console.error('Error en loginUsuario:', error);
-    return {
-      success: false,
-      data: null,
-      token: null,
-      error: error.message || 'Error al iniciar sesión',
-    };
-  }
-}
-
-/**
- * GET - Obtener todos los préstamos
- */
 export async function getPrestamos() {
   try {
     const data = await fetchWithTimeout(`${API_URL}/prestamos`);
@@ -166,9 +201,6 @@ export async function getPrestamos() {
   }
 }
 
-/**
- * GET - Obtener préstamo por ID
- */
 export async function getPrestamoById(id) {
   try {
     if (!id) {
@@ -191,9 +223,6 @@ export async function getPrestamoById(id) {
   }
 }
 
-/**
- * POST - Crear un nuevo préstamo
- */
 export async function crearPrestamo(prestamoData) {
   try {
     if (!prestamoData) {
@@ -220,9 +249,6 @@ export async function crearPrestamo(prestamoData) {
   }
 }
 
-/**
- * PUT - Actualizar préstamo
- */
 export async function actualizarPrestamo(id, prestamoData) {
   try {
     if (!id || !prestamoData) {
@@ -249,9 +275,6 @@ export async function actualizarPrestamo(id, prestamoData) {
   }
 }
 
-/**
- * GET - Health check de la API
- */
 export async function healthCheck() {
   try {
     const data = await fetchWithTimeout(`${API_URL}/health`);
@@ -270,7 +293,7 @@ export async function healthCheck() {
   }
 }
 
-export default {
+const apiService = {
   getUsuarios,
   getUsuarioById,
   loginUsuario,
@@ -279,4 +302,8 @@ export default {
   crearPrestamo,
   actualizarPrestamo,
   healthCheck,
+  saveSession,
+  clearSession,
 };
+
+export default apiService;
